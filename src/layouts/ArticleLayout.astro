@@ -1,0 +1,235 @@
+---
+/**
+ * ArticleLayout.astro
+ * 記事詳細ページ用レイアウト
+ *
+ * 機能:
+ * - Essay判定による段階的フォント読み込み（Essayのみ preload）
+ * - OGP / Twitter Card メタタグ（BaseLayoutに渡す）
+ * - 構造化データ（Article Schema）など（BaseLayoutに渡す）
+ * - レイアウト、目次、関連記事など
+ */
+
+import BaseLayout from "./BaseLayout.astro";
+import Breadcrumbs from "../components/Breadcrumbs.astro";
+import TableOfContents from "../components/TableOfContents.astro";
+import RelatedArticles from "../components/RelatedArticles.astro";
+import ReadingProgressBar from "../components/ReadingProgressBar.astro";
+import FavoriteButton from "../components/FavoriteButton.astro";
+
+import { getStrapiImageUrl } from "../lib/strapiClient";
+import { parseMarkdown, extractHeadingsFromMarkdown } from "../lib/markdownParser";
+import { generateArticleSchema, generateBreadcrumbSchema } from "../lib/structuredData";
+import { t, formatDate, type Locale } from "../lib/i18n";
+
+interface Props {
+  article: any;
+  locale: Locale;
+  relatedArticles?: any[];
+}
+
+const { article, locale, relatedArticles = [] } = Astro.props as Props;
+
+// Essay判定（frontmatterで essay: true）
+const isEssay = article?.essay === true;
+
+// 画像URL生成
+const heroImageUrl = getStrapiImageUrl(article?.heroImage?.url || article?.coverImage?.url);
+const coverImageUrl = getStrapiImageUrl(article?.coverImage?.url);
+
+// Markdown → HTML変換
+const contentHtml = parseMarkdown(article?.content || "");
+
+// 目次生成
+const tocItems = extractHeadingsFromMarkdown(article?.content || "");
+
+// 構造化データ
+const articleSchema = generateArticleSchema(article, locale);
+
+const breadcrumbItems = [
+  { name: t(locale, "nav.home"), url: `/${locale}/` },
+  { name: t(locale, "nav.articles"), url: `/${locale}/articles` },
+  { name: article?.title ?? "", url: "" },
+];
+
+const breadcrumbSchema = generateBreadcrumbSchema(breadcrumbItems, locale);
+const structuredData = [articleSchema, breadcrumbSchema];
+
+// OGPデータ（BaseLayoutが受け取る前提）
+const ogpData = {
+  type: "article" as const,
+  image: coverImageUrl,
+  publishedTime: article?.publishedAt,
+  modifiedTime: article?.updatedAt || article?.publishedAt,
+  tags: article?.tags?.map((x: any) => x.name) || [],
+};
+
+// ページタイトル・説明
+const pageTitle = article?.seoTitle || article?.title || "Genryu Japan";
+const pageDescription = article?.seoDescription || article?.excerpt || article?.title || "";
+---
+
+<BaseLayout
+  title={pageTitle}
+  description={pageDescription}
+  locale={locale}
+  ogpData={ogpData}
+  structuredData={structuredData}
+>
+  {/* ✅ Essay記事の場合だけ preload（head slotに差し込む） */}
+  {isEssay && (
+    <link
+      slot="head"
+      rel="preload"
+      href="/fonts/GenryuMincho-Essay.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
+  )}
+
+  <ReadingProgressBar />
+
+  <div class="article-container">
+    <Breadcrumbs items={breadcrumbItems} locale={locale} />
+
+    <div class="article-layout">
+      {tocItems.length > 0 && (
+        <aside class="article-sidebar">
+          <TableOfContents
+            items={tocItems}
+            title={locale === "ja" ? "目次" : "Table of Contents"}
+          />
+        </aside>
+      )}
+
+      <article class:list={["article-main", { essay: isEssay }]}>
+        {heroImageUrl && (
+          <div class="article-hero">
+            <img
+              src={heroImageUrl}
+              alt={article?.title}
+              width="1200"
+              height="630"
+              loading="eager"
+            />
+          </div>
+        )}
+
+        <header class="article-header">
+          {article?.category && (
+            <div class="article-meta-top">
+              <span class="category-badge" data-category={article.category.slug}>
+                {article.category.name}
+              </span>
+
+              {isEssay && (
+                <span class="essay-badge">
+                  {locale === "ja" ? "論考" : "Essay"}
+                </span>
+              )}
+            </div>
+          )}
+
+          <h1 class="article-title">{article?.title}</h1>
+
+          {article?.excerpt && <p class="article-excerpt">{article.excerpt}</p>}
+
+          <div class="article-meta">
+            {article?.publishedAt && (
+              <time class="article-date" datetime={article.publishedAt}>
+                {formatDate(article.publishedAt, locale)}
+              </time>
+            )}
+
+            {article?.readingTime && (
+              <span class="reading-time">
+                {article.readingTime} {t(locale, "article.readTime")}
+              </span>
+            )}
+
+            <FavoriteButton
+              slug={article?.slug}
+              title={article?.title}
+              locale={locale}
+            />
+          </div>
+        </header>
+
+        <div class="article-content prose" set:html={contentHtml} />
+
+        {article?.tags?.length > 0 && (
+          <footer class="article-footer">
+            <div class="article-tags">
+              <span class="tags-label">{t(locale, "article.tags")}:</span>
+              {article.tags.map((tag: any) => (
+                <a href={`/${locale}/tags/${tag.slug}`} class="tag-link">
+                  {tag.name}
+                </a>
+              ))}
+            </div>
+
+            <div class="article-share">
+              <span class="share-label">{locale === "ja" ? "シェア" : "Share"}:</span>
+              <button
+                class="share-button"
+                data-share="twitter"
+                data-url={Astro.url.href}
+                data-text={article?.title}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                </svg>
+              </button>
+
+              <button
+                class="share-button"
+                data-share="facebook"
+                data-url={Astro.url.href}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+              </button>
+            </div>
+          </footer>
+        )}
+      </article>
+    </div>
+
+    {relatedArticles.length > 0 && (
+      <RelatedArticles
+        articles={relatedArticles}
+        locale={locale}
+        title={locale === "ja" ? "関連記事" : "Related Articles"}
+      />
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  /* ここはあなたの既存CSSをそのまま残してOK */
+</style>
+
+<script>
+  // ここも既存のままでOK（必要なら後でAstro方式に最適化できる）
+  document.querySelectorAll('.share-button').forEach(button => {
+    button.addEventListener('click', () => {
+      const shareType = button.getAttribute('data-share');
+      const url = button.getAttribute('data-url') || window.location.href;
+      const text = button.getAttribute('data-text') || document.title;
+
+      let shareUrl = '';
+
+      if (shareType === 'twitter') {
+        shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+      } else if (shareType === 'facebook') {
+        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+      }
+
+      if (shareUrl) {
+        window.open(shareUrl, '_blank', 'width=600,height=400');
+      }
+    });
+  });
+</script>

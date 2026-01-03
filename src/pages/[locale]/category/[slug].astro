@@ -1,0 +1,115 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import ArticleCard from '../../../components/ArticleCard.astro';
+import { fetchArticlesByCategory, fetchCategories } from '../../../lib/strapiClient';
+import { locales, t, type Locale } from '../../../lib/i18n';
+
+type CategoryLike = { slug: string; name?: string; description?: string };
+
+function pickArray<T>(maybe: any): T[] {
+  if (Array.isArray(maybe)) return maybe as T[];
+  if (Array.isArray(maybe?.data)) return maybe.data as T[];
+  if (Array.isArray(maybe?.items)) return maybe.items as T[];
+  if (Array.isArray(maybe?.data?.data)) return maybe.data.data as T[];
+  return [];
+}
+
+export async function getStaticPaths() {
+  // ✅ ここに移動（＝Astro生成物でも確実に参照できる）
+  const FALLBACK_CATEGORIES: CategoryLike[] = [
+    { slug: 'culture' },
+    { slug: 'language' },
+    { slug: 'food' },
+    { slug: 'society' },
+    { slug: 'art' },
+    { slug: 'travel' },
+  ];
+
+  const allowed = new Set(FALLBACK_CATEGORIES.map(c => c.slug));
+  const paths: Array<{ params: { locale: string; slug: string } }> = [];
+
+  for (const locale of locales) {
+    let cats: CategoryLike[] = [];
+
+    try {
+      const res = await fetchCategories(locale);
+      const arr = pickArray<CategoryLike>(res);
+      cats = arr.length ? arr : FALLBACK_CATEGORIES;
+    } catch {
+      cats = FALLBACK_CATEGORIES;
+    }
+
+    const safeCats = cats.filter(c => allowed.has(c.slug));
+    const finalCats = safeCats.length ? safeCats : FALLBACK_CATEGORIES;
+
+    for (const c of finalCats) {
+      paths.push({ params: { locale, slug: c.slug } });
+    }
+  }
+
+  return paths;
+}
+
+const { locale, slug } = Astro.params as { locale: Locale; slug: string };
+
+const translated = t(locale, `nav.${slug}` as any);
+const categoryName =
+  translated && translated !== `nav.${slug}`
+    ? translated
+    : slug.charAt(0).toUpperCase() + slug.slice(1);
+
+const defaultDesc =
+  locale === 'ja'
+    ? 'このカテゴリの記事一覧です。'
+    : `Explore articles about ${categoryName}.`;
+
+const pageTitle = `${categoryName} | ${t(locale, 'site.title' as any) ?? 'Genryu Japan'}`;
+const pageDescription = defaultDesc;
+
+let articles: any[] = [];
+try {
+  const res = await fetchArticlesByCategory(slug, locale);
+  articles = pickArray<any>(res);
+} catch {
+  articles = [];
+}
+
+const canonicalPath = `/${locale}/category/${slug}`;
+const hreflangBasePath = `/category/${slug}`;
+---
+
+<BaseLayout
+  title={pageTitle}
+  description={pageDescription}
+  locale={locale}
+  canonicalPath={canonicalPath}
+  hreflangBasePath={hreflangBasePath}
+>
+  <section class="category-page">
+    <div class="container-reading">
+      <header class="category-header">
+        <h1 class="category-title">{categoryName}</h1>
+        <p class="category-sub">
+          {locale === 'ja'
+            ? `${articles.length} 件`
+            : `${articles.length} ${articles.length === 1 ? 'article' : 'articles'}`}
+        </p>
+      </header>
+
+      {articles.length > 0 ? (
+        <div class="category-articles">
+          {articles.map(article => (
+            <ArticleCard article={article} locale={locale} showMeta={true} />
+          ))}
+        </div>
+      ) : (
+        <div class="category-empty">
+          <p>
+            {t(locale, 'home.comingSoon' as any) ??
+              (locale === 'ja' ? '準備中です。' : 'Coming soon.')}
+          </p>
+        </div>
+      )}
+    </div>
+  </section>
+</BaseLayout>

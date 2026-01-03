@@ -1,0 +1,50 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { locales, type Locale, t } from '../../../lib/i18n';
+import { fetchArticles } from '../../../lib/strapiClient';
+
+function pickArray<T>(maybe: any): T[] {
+  if (Array.isArray(maybe)) return maybe as T[];
+  if (Array.isArray(maybe?.data)) return maybe.data as T[];
+  if (Array.isArray(maybe?.items)) return maybe.items as T[];
+  if (Array.isArray(maybe?.data?.data)) return maybe.data.data as T[];
+  return [];
+}
+
+export async function getStaticPaths() {
+  const paths: Array<{ params: { locale: string; slug: string } }> = [];
+
+  for (const locale of locales) {
+    try {
+      // pageSize は適宜。Strapi未稼働でも try/catch でビルド継続
+      const res = await fetchArticles(locale, {}, 'publishedAt:desc', 200);
+      const articles = pickArray<any>(res);
+
+      for (const a of articles) {
+        if (a?.slug) paths.push({ params: { locale, slug: a.slug } });
+      }
+    } catch {
+      // Strapiが落ちてもビルドを落とさない
+    }
+  }
+
+  return paths;
+}
+
+const { locale, slug } = Astro.params as { locale: Locale; slug: string };
+
+const pageTitle =
+  locale === 'ja'
+    ? `記事: ${slug} | ${t(locale, 'site.title' as any) ?? 'Genryu Japan'}`
+    : `Article: ${slug} | ${t(locale, 'site.title' as any) ?? 'Genryu Japan'}`;
+---
+
+<BaseLayout title={pageTitle} description="" locale={locale}>
+  <section class="container-reading" style="padding: var(--space-macro) 0;">
+    <h1 style="margin-bottom: var(--space-meso);">Article</h1>
+    <p style="color: var(--text-secondary);">
+      This page is a placeholder. Restore the full article detail implementation here.
+    </p>
+    <p style="color: var(--text-secondary);">slug: <code>{slug}</code></p>
+  </section>
+</BaseLayout>

@@ -1,0 +1,200 @@
+---
+import { getArticleImageUrl } from '../lib/strapiClient';
+import { t, formatDate, type Locale } from '../lib/i18n';
+
+interface Props {
+  article: any;
+  locale: Locale;
+  showCategory?: boolean;
+  showMeta?: boolean; // 日付・読了時間の表示制御
+  showImage?: boolean; // 画像を出す/出さない（ホームを静かにしたい等）
+}
+
+const {
+  article,
+  locale,
+  showCategory = false,
+  showMeta = true,
+  showImage = true,
+} = Astro.props;
+
+const articleUrl = `/${locale}/articles/${article?.slug ?? ''}`;
+
+// 画像の扱い方針：
+// - CMS画像がある時だけ出す（placeholderで埋めない）＝静けさ優先
+// - getArticleImageUrl が fallback を返す設計の場合でも、ここで抑止できるようにしている
+const rawImageUrl = getArticleImageUrl(article);
+// placeholderっぽいパスを使っている場合は表示しない（必要ならパスは環境に合わせて調整）
+const isPlaceholder =
+  typeof rawImageUrl === 'string' &&
+  (rawImageUrl.includes('placeholder') || rawImageUrl.endsWith('/images/placeholder.jpg'));
+
+const hasRealImage = !!rawImageUrl && !isPlaceholder;
+
+const title = article?.title?.trim() || '(Untitled)';
+const excerpt = article?.excerpt?.trim() || '';
+const categoryName = article?.category?.name;
+const publishedAt = article?.publishedAt;
+const readingTime = article?.readingTime;
+---
+
+<article class="article-card">
+  <a href={articleUrl} class="article-card-link" aria-label={title}>
+    {showImage && hasRealImage && (
+      <div class="article-card-image">
+        <img
+          src={rawImageUrl}
+          alt=""
+          width="400"
+          height="225"
+          loading="lazy"
+          decoding="async"
+        />
+      </div>
+    )}
+
+    <div class="article-card-content">
+      {showMeta && (
+        <div class="article-card-meta">
+          {showCategory && categoryName && (
+            <span class="category-badge">{categoryName}</span>
+          )}
+
+          {publishedAt && (
+            <time datetime={publishedAt}>
+              {formatDate(publishedAt, locale)}
+            </time>
+          )}
+
+          {typeof readingTime === 'number' && readingTime > 0 && (
+            <span>
+              {readingTime} {t(locale, 'article.readTime')}
+            </span>
+          )}
+        </div>
+      )}
+
+      <h3 class="article-card-title">{title}</h3>
+
+      {excerpt && <p class="article-card-excerpt">{excerpt}</p>}
+
+      <span class="article-card-cta">
+        {t(locale, 'article.readMore')} →
+      </span>
+    </div>
+  </a>
+</article>
+
+<style>
+  .article-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    height: 100%;
+    transition:
+      transform var(--transition-base),
+      box-shadow var(--transition-base),
+      border-color var(--transition-base);
+  }
+
+  .article-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: rgba(39, 68, 114, 0.2);
+  }
+
+  .article-card-link {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 2rem;
+    padding: 1.5rem;
+    text-decoration: none;
+    color: inherit;
+    height: 100%;
+  }
+
+  @media (max-width: 640px) {
+    .article-card-link {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+      padding: 1rem;
+    }
+  }
+
+  .article-card-image {
+    width: 100%;
+    aspect-ratio: 16/9;
+    overflow: hidden;
+    background: var(--accent-beige);
+    border-radius: var(--border-radius-sm);
+  }
+
+  .article-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform var(--transition-base);
+  }
+
+  .article-card:hover .article-card-image img {
+    transform: scale(1.02);
+  }
+
+  .article-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .article-card-meta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .category-badge {
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .article-card-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.4;
+    font-family: var(--font-serif);
+    margin: 0;
+    word-break: break-word;
+  }
+
+  .article-card-excerpt {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .article-card-cta {
+    font-size: 0.875rem;
+    color: var(--accent-blue);
+    font-weight: 500;
+    transition: color var(--transition-base);
+    margin-top: auto;
+  }
+
+  .article-card:hover .article-card-cta {
+    color: var(--accent-gold);
+  }
+</style>

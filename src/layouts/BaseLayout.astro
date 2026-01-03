@@ -1,0 +1,163 @@
+---
+/**
+ * BaseLayout.astro
+ * - デザイン: fonts.css / font preload / flex レイアウト（旧版を保持）
+ * - 安全化: Astro.site 未設定対応 / canonicalPath / hreflangBasePath / schema（新版を統合）
+ */
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import SchemaOrg from '../components/SchemaOrg.astro';
+import { type Locale, defaultLocale } from '../lib/i18n';
+
+import '../styles/base.css';
+import '../styles/theme.css';
+import '../styles/fonts.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+  locale?: Locale;
+  
+  // SEO（Phase 6追加）
+  canonicalPath?: string;      // 例: /en/category/culture
+  hreflangBasePath?: string;   // 例: /category/culture（locale抜き）
+  image?: string;
+  ogType?: 'website' | 'article';
+  noIndex?: boolean;
+  
+  // Schema.org（Phase 6追加）
+  schema?: unknown;
+}
+
+const {
+  title = 'Genryu Japan',
+  description = 'The Origin of Flow',
+  locale = defaultLocale,
+  canonicalPath,
+  hreflangBasePath,
+  image = '/images/og-default.jpg',
+  ogType = 'website',
+  noIndex = false,
+  schema,
+} = Astro.props as Props;
+
+const ALL_LOCALES: Locale[] = ['en', 'ja', 'es', 'fr', 'th', 'id', 'zh', 'de'];
+
+// ---- URL生成（Astro.site が無い環境でも壊さない）----
+const site = Astro.site?.toString() ?? '';
+const pathname = Astro.url?.pathname ?? '/';
+
+/**
+ * siteがある時は絶対URL、無い時は相対パスを返す
+ */
+function absUrl(path: string): string {
+  if (!site) return path;
+  return new URL(path, site).toString();
+}
+
+/**
+ * パス正規化（重複スラッシュ除去）
+ */
+function normalizePath(p: string): string {
+  if (!p.startsWith('/')) p = '/' + p;
+  return p.replace(/\/{2,}/g, '/');
+}
+
+// canonical: canonicalPath指定時はそれを使う、無い時は現在のpathname
+const pathForCanonical = normalizePath(canonicalPath ?? pathname);
+const canonicalURL = site ? absUrl(pathForCanonical) : '';
+
+// hreflang: hreflangBasePath指定時のみ生成
+const hreflangPath = hreflangBasePath ? normalizePath(hreflangBasePath) : null;
+const xDefaultHref = hreflangPath ? absUrl(`/en${hreflangPath}`) : '';
+
+// og:image: 絶対URLまたは相対パス
+const ogImageURL = 
+  image.startsWith('http') 
+    ? image 
+    : site 
+      ? absUrl(image) 
+      : image;
+
+// Header active判定用
+const currentPath = pathname;
+---
+
+<!DOCTYPE html>
+<html lang={locale}>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  
+  <title>{title}</title>
+  {description && <meta name="description" content={description}>}
+  
+  {/* robots: noindex 用（プレビュー環境や下書き用途） */}
+  {noIndex && <meta name="robots" content="noindex,nofollow">}
+  
+  {/* canonical（site設定がある時のみ） */}
+  {canonicalURL && <link rel="canonical" href={canonicalURL}>}
+  
+  {/* hreflang（Phase 6追加） */}
+  {hreflangPath && ALL_LOCALES.map(loc => (
+    <link 
+      rel="alternate" 
+      hreflang={loc} 
+      href={absUrl(`/${loc}${hreflangPath}`)}
+    />
+  ))}
+  {hreflangPath && xDefaultHref && (
+    <link rel="alternate" hreflang="x-default" href={xDefaultHref} />
+  )}
+  
+  {/* Core font preload（デザイン保持） */}
+  <link
+    rel="preload"
+    href="/fonts/GenryuMincho-Core.woff2"
+    as="font"
+    type="font/woff2"
+    crossorigin="anonymous"
+  />
+  
+  {/* OGP */}
+  <meta property="og:title" content={title}>
+  {description && <meta property="og:description" content={description}>}
+  {canonicalURL && <meta property="og:url" content={canonicalURL}>}
+  <meta property="og:type" content={ogType}>
+  <meta property="og:site_name" content="Genryu Japan">
+  {ogImageURL && <meta property="og:image" content={ogImageURL}>}
+  
+  {/* Twitter Card */}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content={title}>
+  {description && <meta name="twitter:description" content={description}>}
+  {ogImageURL && <meta name="twitter:image" content={ogImageURL}>}
+  
+  {/* Schema.org（Phase 6追加） */}
+  {schema && <SchemaOrg schema={schema} />}
+</head>
+<body>
+  <Header locale={locale} currentPath={currentPath} />
+  
+  <main id="main-content">
+    <slot />
+  </main>
+  
+  <Footer locale={locale} />
+</body>
+</html>
+
+<style is:global>
+  /* Header/Footerの高さ変動に強い：mainを伸ばす（デザイン保持） */
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  #main-content {
+    flex: 1;
+  }
+</style>

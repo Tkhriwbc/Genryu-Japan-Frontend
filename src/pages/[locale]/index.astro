@@ -1,0 +1,371 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ArticleCard from '../../components/ArticleCard.astro';
+import {
+  fetchEditorialPicks,
+  fetchCategoryGlimpses,
+  fetchDeepDiveArticles,
+} from '../../lib/strapiClient';
+import { locales, t, type Locale } from '../../lib/i18n';
+
+// ===== Constants =====
+const CATEGORY_SLUGS = ['culture', 'language', 'food', 'society', 'art', 'travel'] as const;
+type CategorySlug = (typeof CATEGORY_SLUGS)[number];
+
+export async function getStaticPaths() {
+  return locales.map((locale) => ({ params: { locale } }));
+}
+
+const { locale } = Astro.params as { locale: Locale };
+
+// ===== Route helpers (prevent URL drift) =====
+const route = {
+  home: (l: Locale) => `/${l}/`,
+  category: (l: Locale, slug: CategorySlug) => `/${l}/category/${slug}`,
+  article: (l: Locale, slug: string) => `/${l}/articles/${slug}`,
+  about: (l: Locale) => `/${l}/about`,
+};
+
+// ===== Data =====
+const [editorialPicksData, categoryGlimpses, deepDiveData] = await Promise.all([
+  fetchEditorialPicks(locale),
+  fetchCategoryGlimpses(locale),
+  fetchDeepDiveArticles(locale),
+]);
+
+const editorialPicks = editorialPicksData.data.slice(0, 5);
+const deepDiveArticles = deepDiveData.data.slice(0, 3);
+---
+
+<BaseLayout
+  title={t(locale, 'site.title')}
+  description={t(locale, 'site.subtitle')}
+  locale={locale}
+>
+  <!-- [01] Hero / Silence -->
+  <section class="hero-silence">
+    <h1 class="hero-title">{t(locale, 'site.title')}</h1>
+    <p class="hero-subtitle">{t(locale, 'site.subtitle')}</p>
+  </section>
+
+  <!-- [02] Entry Points -->
+  <section class="entry-points" aria-label="Entry points">
+    <div class="entry-grid">
+      {CATEGORY_SLUGS.map((category) => (
+        <a href={route.category(locale, category)} class="entry-point">
+          {t(locale, `nav.${category}` as any)}
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <!-- [03] Editorial Picks -->
+  {editorialPicks.length > 0 && (
+    <section class="editorial-picks" aria-label="Editorial picks">
+      <div class="section-container">
+        <h2 class="section-title">{t(locale, 'home.editorialPicks')}</h2>
+        <div class="article-grid">
+          {editorialPicks.map((article) => (
+            <ArticleCard article={article} locale={locale} showMeta={false} />
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
+  <!-- [04] Category Glimpses -->
+<section class="category-glimpses">
+  <div class="container-reading">
+    <h2 class="section-title">
+      {t(locale, 'home.categoryGlimpses')}
+    </h2>
+
+    <div class="glimpses-grid">
+      {categoryGlimpses.map(({ category, articles }) => {
+        const cat = category as CategorySlug;
+
+        return (
+          <div class="category-glimpse">
+            <h3 class="category-title">
+              <a href={route.category(locale, cat)}>
+                {t(locale, `nav.${cat}` as any)}
+              </a>
+            </h3>
+
+            {articles.length > 0 ? (
+              <>
+                <ul class="glimpse-list">
+                  {articles.map((article) => (
+                    <li>
+                      <a href={route.article(locale, article.slug)}>
+                        {article.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+
+                <a href={route.category(locale, cat)} class="more-link">
+                  {t(locale, 'home.more')} →
+                </a>
+              </>
+            ) : (
+              <p class="no-articles">{t(locale, 'home.comingSoon')}</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+</section>
+
+
+  <!-- [05] Deep Dive -->
+  {deepDiveArticles.length > 0 && (
+    <section class="deep-dive" aria-label="Deep dive">
+      <div class="section-container">
+        <h2 class="section-title">{t(locale, 'home.deepDive')}</h2>
+        <p class="section-desc">{t(locale, 'home.deepDiveDesc')}</p>
+
+        <div class="article-grid">
+          {deepDiveArticles.map((article) => (
+            <ArticleCard article={article} locale={locale} showMeta={false} />
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
+  <!-- [06] About Teaser -->
+  <section class="about-teaser" aria-label="About teaser">
+    <div class="teaser-container">
+      <h2 class="teaser-title">{t(locale, 'home.aboutTeaser')}</h2>
+      <p class="teaser-text">{t(locale, 'home.aboutTeaserText')}</p>
+      <a href={route.about(locale)} class="teaser-link">
+        {t(locale, 'home.learnMore')} →
+      </a>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero-silence {
+    text-align: center;
+    padding: 8rem 2rem 6rem;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .hero-title {
+    font-family: var(--font-serif);
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: var(--accent-blue);
+  }
+
+  .hero-subtitle {
+    font-size: clamp(1rem, 3vw, 1.25rem);
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  .entry-points {
+    padding: var(--space-macro) var(--container-padding);
+    background: rgba(248, 246, 241, 0.5);
+  }
+
+  .entry-grid {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .entry-point {
+    text-align: center;
+    padding: 2rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius-md);
+    text-decoration: none;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all var(--transition-base);
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .entry-point:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+  }
+
+  .editorial-picks,
+  .deep-dive {
+    padding: var(--space-macro) var(--container-padding);
+  }
+
+  .section-container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  .section-title {
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 5vw, 2.5rem);
+    margin-bottom: 2rem;
+    color: var(--accent-blue);
+  }
+
+  .section-desc {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 2.5rem;
+    line-height: 1.7;
+  }
+
+  .article-grid {
+    display: grid;
+    gap: 2rem;
+  }
+
+  .category-glimpses {
+    padding: var(--space-macro) var(--container-padding);
+    background: rgba(248, 246, 241, 0.3);
+  }
+
+  .glimpses-grid {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 3rem;
+  }
+
+  .category-glimpse {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .category-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .category-title a {
+    text-decoration: none;
+    color: var(--accent-blue);
+    transition: color var(--transition-base);
+  }
+
+  .category-title a:hover {
+    color: var(--accent-gold);
+  }
+
+  .glimpse-list {
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .glimpse-list a {
+    text-decoration: none;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    transition: color var(--transition-base);
+  }
+
+  .glimpse-list a:hover {
+    color: var(--accent-blue);
+  }
+
+  .more-link {
+    display: inline-block;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--accent-gold);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .more-link:hover {
+    color: var(--accent-blue);
+  }
+
+  .no-articles {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  .about-teaser {
+    padding: var(--space-macro) var(--container-padding);
+    background: rgba(39, 68, 114, 0.03);
+  }
+
+  .teaser-container {
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .teaser-title {
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 5vw, 2.5rem);
+    margin-bottom: 1.5rem;
+    color: var(--accent-blue);
+  }
+
+  .teaser-text {
+    font-size: clamp(1rem, 3vw, 1.125rem);
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    line-height: 1.7;
+  }
+
+  .teaser-link {
+    display: inline-block;
+    padding: 0.875rem 2.5rem;
+    background: var(--accent-blue);
+    color: white;
+    text-decoration: none;
+    border-radius: var(--border-radius-md);
+    font-weight: 500;
+    transition: all var(--transition-base);
+  }
+
+  .teaser-link:hover {
+    background: var(--accent-gold);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  @media (max-width: 768px) {
+    .hero-silence {
+      padding: 4rem 1.5rem 3rem;
+    }
+
+    .entry-grid {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+    }
+
+    .entry-point {
+      padding: 1.5rem 0.75rem;
+      min-height: 80px;
+    }
+
+    .glimpses-grid {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+  }
+</style>

@@ -1,0 +1,6 @@
+---
+import { defaultLocale } from '../lib/i18n';
+
+// 本番ルートは常にロケール付きトップへ
+return Astro.redirect(`/${defaultLocale}/`);
+---

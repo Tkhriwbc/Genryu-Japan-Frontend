@@ -1,0 +1,159 @@
+---
+import { t, type Locale, type UiKey } from '../lib/i18n';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const currentYear = new Date().getFullYear();
+
+/**
+ * Header/Footerで同じリンクを二重管理しないための共通定義
+ * （将来的には src/lib/nav.ts などへ切り出すのがおすすめ）
+ */
+const categoryNavItems = [
+  { key: 'culture', slug: 'culture' },
+  { key: 'language', slug: 'language' },
+  { key: 'food', slug: 'food' },
+  { key: 'society', slug: 'society' },
+  { key: 'art', slug: 'art' },
+  { key: 'travel', slug: 'travel' },
+] as const;
+
+type CategoryKey = typeof categoryNavItems[number]['key'];
+
+function navLabelKey(key: CategoryKey): UiKey {
+  return `nav.${key}` as UiKey;
+}
+---
+
+<footer class="site-footer">
+  <div class="footer-container">
+    <div class="footer-brand">
+      <h3 class="footer-logo">Genryu Japan</h3>
+      <p class="footer-philosophy">{t(locale, 'footer.philosophy')}</p>
+      <p class="footer-tagline">{t(locale, 'footer.tagline')}</p>
+    </div>
+
+    <nav class="footer-nav" aria-label="Footer navigation">
+      <h4>{t(locale, 'footer.navigate')}</h4>
+      <ul>
+        {categoryNavItems.map((item) => (
+          <li>
+            <a href={`/${locale}/category/${item.slug}`}>
+              {t(locale, navLabelKey(item.key))}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <nav class="footer-info" aria-label="Footer information">
+      <h4>{t(locale, 'footer.connect')}</h4>
+      <ul>
+        <li><a href={`/${locale}/about`}>{t(locale, 'nav.about')}</a></li>
+        <li><a href={`/${locale}/privacy`}>{t(locale, 'footer.privacy')}</a></li>
+      </ul>
+    </nav>
+  </div>
+
+  <div class="footer-bottom">
+    <p>&copy; {currentYear} Genryu Japan. {t(locale, 'footer.copyright')}</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    background: var(--accent-blue);
+    color: white;
+    padding: calc(var(--space-macro) * 0.66) var(--container-padding) var(--space-meso);
+    margin-top: var(--space-macro);
+  }
+
+  .footer-container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 3rem;
+    margin-bottom: 3rem;
+  }
+
+  .footer-logo {
+    font-family: var(--font-serif);
+    font-size: 1.75rem;
+    margin-bottom: 0.75rem;
+    font-weight: 700;
+  }
+
+  .footer-philosophy {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    margin-bottom: 1rem;
+    opacity: 0.9;
+  }
+
+  .footer-tagline {
+    font-size: 0.9rem;
+    line-height: 1.7;
+    opacity: 0.8;
+  }
+
+  .footer-nav h4,
+  .footer-info h4 {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1.25rem;
+    opacity: 0.7;
+    font-weight: 600;
+  }
+
+  .footer-nav ul,
+  .footer-info ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .footer-nav li,
+  .footer-info li {
+    margin-bottom: 0.75rem;
+  }
+
+  .footer-nav a,
+  .footer-info a {
+    color: white;
+    text-decoration: none;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    transition: opacity var(--transition-base);
+  }
+
+  .footer-nav a:hover,
+  .footer-info a:hover {
+    opacity: 1;
+  }
+
+  .footer-bottom {
+    text-align: center;
+    padding-top: var(--space-meso);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+
+  @media (max-width: 768px) {
+    .footer-container {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+
+    .site-footer {
+      margin-top: calc(var(--space-macro) * 0.8);
+      padding: var(--space-macro) var(--container-padding) calc(var(--space-meso) * 0.75);
+    }
+  }
+</style>

@@ -1,0 +1,40 @@
+/**
+ * Genryu Japan - Font Definitions
+ * Strategy: Core always, Essay conditional.
+ */
+
+ @font-face {
+    font-family: "Genryu Mincho";
+    src: url("/fonts/GenryuMincho-Core.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  
+  @font-face {
+    font-family: "Genryu Mincho Essay";
+    src: url("/fonts/GenryuMincho-Essay.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  
+  :root {
+    --font-serif: "Genryu Mincho", "Noto Serif JP", "Yu Mincho", "YuMincho", serif;
+    --font-serif-essay: "Genryu Mincho Essay", "Genryu Mincho", "Noto Serif JP", serif;
+  }
+  
+  body {
+    font-family: var(--font-serif);
+  }
+  
+  body.essay,
+  .essay {
+    font-family: var(--font-serif-essay);
+  }
+  
+  /* 見出しはCore固定にしたければこれ */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+  }
+  

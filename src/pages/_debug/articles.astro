@@ -1,0 +1,102 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { defaultLocale } from '../../lib/i18n';
+
+const STRAPI_URL =
+  import.meta.env.PUBLIC_STRAPI_URL ?? 'http://localhost:1337';
+const ARTICLES_ENDPOINT = `${STRAPI_URL}/api/articles`;
+
+type Article = {
+  id?: number | string;
+  title?: string;
+  slug?: string;
+  excerpt?: string;
+  publishedAt?: string;
+};
+
+function normalizeArticle(item: any): Article {
+  // Strapi v4 / v5 混在耐性
+  const a = item?.attributes ?? item ?? {};
+  return {
+    id: item?.id ?? a?.id,
+    title: a?.title,
+    slug: a?.slug,
+    excerpt: a?.excerpt,
+    publishedAt: a?.publishedAt,
+  };
+}
+
+let articles: Article[] = [];
+let debug: any = null;
+
+try {
+  const params = new URLSearchParams();
+  params.append('sort', 'publishedAt:desc');
+  params.append('pagination[pageSize]', '20');
+  params.append('populate[coverImage]', 'true');
+  params.append('populate[category]', 'true');
+
+  const res = await fetch(`${ARTICLES_ENDPOINT}?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+  }
+
+  const json = await res.json();
+  debug = json;
+
+  const data = Array.isArray(json?.data) ? json.data : [];
+  articles = data.map(normalizeArticle);
+} catch (e) {
+  const message = e instanceof Error ? e.message : JSON.stringify(e);
+  console.error('[__debug/articles] fetch error:', message);
+  debug = { error: message, endpoint: ARTICLES_ENDPOINT };
+  articles = [];
+}
+---
+
+<BaseLayout
+  title="Genryu Japan – Debug / Articles"
+  description="Debug view for Strapi connectivity and data shape."
+  locale={defaultLocale}
+  noIndex={true}
+>
+  <section class="page-container">
+    <h1 class="page-title">Debug: Articles</h1>
+    <p class="page-subtitle">
+      This page is for development only. It is excluded from search engines.
+    </p>
+
+    <details style="margin-bottom:1.5rem;">
+      <summary>Raw JSON from Strapi</summary>
+      <pre>{JSON.stringify(debug, null, 2)}</pre>
+    </details>
+
+    {articles.length === 0 ? (
+      <p>No articles found.</p>
+    ) : (
+      <ul class="article-list">
+        {articles.map((a) => (
+          <li class="article-card">
+            <div class="article-card-title">
+              {a.title ?? '(no title)'}
+            </div>
+
+            <div class="article-card-meta">
+              slug: {a.slug ?? '-'}
+              {a.publishedAt && (
+                <>
+                  {' '}·{' '}
+                  {new Date(a.publishedAt).toLocaleDateString('en-US')}
+                </>
+              )}
+            </div>
+
+            {a.excerpt && (
+              <p class="article-card-excerpt">{a.excerpt}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+</BaseLayout>

@@ -1,0 +1,162 @@
+---
+import { t, type Locale, type UiKey } from '../lib/i18n';
+
+interface Props {
+  locale: Locale;
+  currentPath?: string;
+}
+
+const { locale, currentPath = '' } = Astro.props;
+
+const navItems = [
+  { key: 'culture', href: (l: Locale) => `/${l}/category/culture` },
+  { key: 'language', href: (l: Locale) => `/${l}/category/language` },
+  { key: 'food', href: (l: Locale) => `/${l}/category/food` },
+  { key: 'society', href: (l: Locale) => `/${l}/category/society` },
+  { key: 'art', href: (l: Locale) => `/${l}/category/art` },
+  { key: 'travel', href: (l: Locale) => `/${l}/category/travel` },
+] as const;
+
+type NavKey = typeof navItems[number]['key'];
+
+function navLabelKey(key: NavKey): UiKey {
+  return `nav.${key}` as UiKey;
+}
+
+function normalizePath(path: string): string {
+  return path.split('?')[0].split('#')[0];
+}
+
+function isActive(itemKey: NavKey): boolean {
+  const path = normalizePath(currentPath);
+  return path.startsWith(`/${locale}/category/${itemKey}`);
+}
+---
+
+<header class="site-header">
+  <!-- Headerはreadingより少し広い方が気持ちいいのでcontainer-wide推奨 -->
+  <div class="header-container container-wide">
+    <div class="header-brand">
+      <a href={`/${locale}/`} aria-label={t(locale, 'site.title')}>
+        <h1 class="site-logo">Genryu Japan</h1>
+        <p class="site-tagline">{t(locale, 'site.tagline')}</p>
+      </a>
+    </div>
+
+    <nav class="site-nav" aria-label="Main navigation">
+      {navItems.map((item) => (
+        <a
+          href={item.href(locale)}
+          class:list={['nav-link', { active: isActive(item.key) }]}
+          aria-current={isActive(item.key) ? 'page' : undefined}
+        >
+          {t(locale, navLabelKey(item.key))}
+        </a>
+      ))}
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: var(--z-header);
+    backdrop-filter: blur(10px);
+  }
+
+  /* container-wide が max-width/padding を担うので、ここではレイアウトだけ */
+  .header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-meso);
+    padding-block: calc(var(--space-micro) * 1.5); /* 1.5rem相当のニュアンス */
+  }
+
+  .header-brand a {
+    text-decoration: none;
+    color: inherit;
+    display: inline-block;
+  }
+
+  .site-logo {
+    font-family: var(--font-serif);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem 0;
+    color: var(--accent-blue);
+    line-height: 1.2;
+  }
+
+  .site-tagline {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .site-nav {
+    display: flex;
+    gap: var(--space-meso);
+    align-items: center;
+    flex-wrap: wrap; /* ここがキツキツ対策の本体 */
+    justify-content: flex-end;
+  }
+
+  .nav-link {
+    text-decoration: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color var(--transition-base);
+    position: relative;
+    padding: 0.5rem 0;
+    white-space: nowrap; /* ラベルが変に改行されるのを防ぐ */
+  }
+
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 1px;
+    background: var(--accent-gold);
+    transition: width var(--transition-base);
+  }
+
+  .nav-link:hover,
+  .nav-link:focus,
+  .nav-link.active {
+    color: var(--accent-blue);
+  }
+
+  .nav-link:hover::after,
+  .nav-link:focus::after,
+  .nav-link.active::after {
+    width: 100%;
+  }
+
+  @media (max-width: 768px) {
+    .header-container {
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-micro);
+      padding-block: var(--space-micro);
+    }
+
+    .site-nav {
+      justify-content: center;
+      gap: var(--space-micro);
+    }
+
+    .nav-link {
+      font-size: 0.85rem;
+    }
+  }
+</style>
