@@ -1,30 +1,97 @@
 ---
-import BaseLayout from '../../../layouts/BaseLayout.astro';
-import { locales, type Locale, t } from '../../../lib/i18n';
-import { fetchArticles } from '../../../lib/strapiClient';
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import { locales, type Locale, t } from "../../../lib/i18n";
 
-function pickArray<T>(maybe: any): T[] {
-  if (Array.isArray(maybe)) return maybe as T[];
-  if (Array.isArray(maybe?.data)) return maybe.data as T[];
-  if (Array.isArray(maybe?.items)) return maybe.items as T[];
-  if (Array.isArray(maybe?.data?.data)) return maybe.data.data as T[];
+/**
+ * Strapi v4/5 のよくある形:
+ * { data: [{ id, attributes: {...} }], meta: {...} }
+ * もしくはフラット化されているケースも想定して、最小限だけ吸収する。
+ */
+
+type StrapiEntity<T> =
+  | { id: number | string; attributes: T }
+  | (T & { id?: number | string });
+
+function asArray(maybe: any): any[] {
+  if (Array.isArray(maybe)) return maybe;
+  if (Array.isArray(maybe?.data)) return maybe.data;
   return [];
 }
 
+function unwrapEntity<T extends Record<string, any>>(entity: StrapiEntity<T> | null | undefined): (T & { id?: any }) | null {
+  if (!entity) return null;
+  if ((entity as any).attributes && typeof (entity as any).attributes === "object") {
+    const e = entity as any;
+    return { id: e.id, ...e.attributes };
+  }
+  return entity as any;
+}
+
+function safeText(v: any): string {
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  return String(v);
+}
+
+function stripHtmlToText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function makeDescription(source: any, fallback: string): string {
+  const raw = safeText(source);
+  const s = stripHtmlToText(raw);
+  if (!s) return fallback;
+  return s.length > 160 ? s.slice(0, 157) + "…" : s;
+}
+
+function formatDate(isoLike: any, locale: string): { datetime: string; label: string } | null {
+  const s = safeText(isoLike);
+  if (!s) return null;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    datetime: d.toISOString(),
+    label: d.toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    }),
+  };
+}
+
 export async function getStaticPaths() {
+  const STRAPI = import.meta.env.PUBLIC_STRAPI_URL;
   const paths: Array<{ params: { locale: string; slug: string } }> = [];
+
+  // ENVが無いなら、記事詳細は生成しない（ビルド自体は通す）
+  if (!STRAPI) return paths;
 
   for (const locale of locales) {
     try {
-      // pageSize は適宜。Strapi未稼働でも try/catch でビルド継続
-      const res = await fetchArticles(locale, {}, 'publishedAt:desc', 200);
-      const articles = pickArray<any>(res);
+      const url =
+        `${STRAPI}/api/articles` +
+        `?locale=${encodeURIComponent(locale)}` +
+        `&fields[0]=slug` +
+        `&pagination[pageSize]=1000`;
 
-      for (const a of articles) {
-        if (a?.slug) paths.push({ params: { locale, slug: a.slug } });
+      const res = await fetch(url);
+      if (!res.ok) continue;
+
+      const json = await res.json();
+      const rows = asArray(json);
+
+      for (const row of rows) {
+        const a = unwrapEntity<any>(row);
+        const slug = a?.slug;
+        if (typeof slug === "string" && slug.length > 0) {
+          paths.push({ params: { locale, slug } });
+        }
       }
     } catch {
-      // Strapiが落ちてもビルドを落とさない
+      // Strapiが落ちていてもビルドは継続（カテゴリ等が生成できる前提）
     }
   }
 
@@ -33,18 +100,112 @@ export async function getStaticPaths() {
 
 const { locale, slug } = Astro.params as { locale: Locale; slug: string };
 
-const pageTitle =
-  locale === 'ja'
-    ? `記事: ${slug} | ${t(locale, 'site.title' as any) ?? 'Genryu Japan'}`
-    : `Article: ${slug} | ${t(locale, 'site.title' as any) ?? 'Genryu Japan'}`;
+const SITE_TITLE = safeText(t(locale, "site.title" as any) ?? "Genryu Japan");
+const STRAPI = import.meta.env.PUBLIC_STRAPI_URL;
+
+// 記事取得
+let article: any | null = null;
+
+if (STRAPI) {
+  try {
+    // 必要最低限だけ取る（populate=* を避ける）
+    // - title / excerpt / contentHtml / content / publishedAt / category(name)
+    const url =
+      `${STRAPI}/api/articles` +
+      `?filters[slug][$eq]=${encodeURIComponent(slug)}` +
+      `&locale=${encodeURIComponent(locale)}` +
+      `&fields[0]=title` +
+      `&fields[1]=excerpt` +
+      `&fields[2]=description` +
+      `&fields[3]=content` +
+      `&fields[4]=contentHtml` +
+      `&fields[5]=body` +
+      `&fields[6]=publishedAt` +
+      `&populate[category][fields][0]=name`;
+
+    const res = await fetch(url);
+    if (res.ok) {
+      const json = await res.json();
+      const first = asArray(json)[0];
+      article = unwrapEntity<any>(first);
+    }
+  } catch {
+    article = null;
+  }
+}
+
+const isNotFound = !article;
+
+// 表示用
+const articleTitle = safeText(article?.title) || safeText(slug);
+const pageTitle = `${articleTitle} | ${SITE_TITLE}`;
+
+const description = makeDescription(
+  article?.excerpt ?? article?.description ?? article?.content ?? article?.body ?? article?.contentHtml,
+  locale === "ja" ? "Genryu Japanの記事ページです。" : "An article page on Genryu Japan."
+);
+
+// 本文は「HTMLとして保存されている」場合だけHTML扱いにする（手戻り防止）
+const contentHtml = safeText(article?.contentHtml ?? "");
+const contentText = safeText((article?.content ?? article?.body ?? "") ?? "");
+
+
+// Category
+const categoryName =
+  safeText(unwrapEntity<any>(article?.category)?.name) ||
+  safeText(article?.category?.data?.attributes?.name) ||
+  safeText(article?.category?.name);
+
+// Date
+const published = formatDate(article?.publishedAt ?? article?.published_at, locale);
 ---
 
-<BaseLayout title={pageTitle} description="" locale={locale}>
+<BaseLayout title={pageTitle} description={description} locale={locale}>
   <section class="container-reading" style="padding: var(--space-macro) 0;">
-    <h1 style="margin-bottom: var(--space-meso);">Article</h1>
-    <p style="color: var(--text-secondary);">
-      This page is a placeholder. Restore the full article detail implementation here.
-    </p>
-    <p style="color: var(--text-secondary);">slug: <code>{slug}</code></p>
+    {isNotFound ? (
+      <div>
+        <h1 style="margin-bottom: var(--space-meso);">
+          {locale === "ja" ? "記事が見つかりません" : "Article Not Found"}
+        </h1>
+        <p style="color: var(--text-secondary);">
+          {locale === "ja"
+            ? "このURLの記事は存在しないか、未公開の可能性があります。"
+            : "This article does not exist or may be unpublished."}
+        </p>
+        <p style="color: var(--text-secondary);">
+          slug: <code>{slug}</code>
+        </p>
+      </div>
+    ) : (
+      <div>
+        <header style="margin-bottom: var(--space-meso);">
+          <h1 style="margin: 0 0 var(--space-micro) 0;">{articleTitle}</h1>
+
+          {(published || categoryName) && (
+            <p style="margin: 0; color: var(--text-secondary);">
+              {published && <time datetime={published.datetime}>{published.label}</time>}
+              {published && categoryName && <span> · </span>}
+              {categoryName && <span>{categoryName}</span>}
+            </p>
+          )}
+        </header>
+
+        {contentHtml ? (
+          // ※ contentHtml は「HTMLとして保存されている前提」。
+          //   将来的には sanitize を導入するか、CMS側で sanitize 済みのみ保存する運用に寄せるのが安全。
+          <article class="prose">
+            <Fragment set:html={contentHtml} />
+          </article>
+        ) : contentText ? (
+          <article class="prose">
+            <p>{contentText}</p>
+          </article>
+        ) : (
+          <p style="color: var(--text-secondary);">
+            {locale === "ja" ? "本文がまだ設定されていません。" : "Content is not set yet."}
+          </p>
+        )}
+      </div>
+    )}
   </section>
 </BaseLayout>
